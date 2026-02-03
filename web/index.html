@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ConnectX - 4 in a Row</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 24px; }
+    #board { display: grid; grid-template-columns: repeat(7, 48px); gap: 6px; margin: 16px 0; }
+    .cell { width: 48px; height: 48px; border-radius: 50%; background: #e0e0e0; display: flex; align-items: center; justify-content: center; cursor: pointer; }
+    .cell.player1 { background: #ff6b6b; }
+    .cell.player2 { background: #4d96ff; }
+    .column-button { margin: 0 4px; }
+    #status { margin-top: 12px; }
+  </style>
+</head>
+<body>
+  <h1>ConnectX - 4 in a Row</h1>
+  <div>
+    <label>
+      Username:
+      <input id="username" type="text" placeholder="Enter username" />
+    </label>
+    <button id="join">Join Game</button>
+  </div>
+
+  <div id="game" style="display:none;">
+    <div id="turn"></div>
+    <div id="board"></div>
+    <div id="status"></div>
+    <h3>Leaderboard</h3>
+    <ul id="leaderboard"></ul>
+  </div>
+
+  <script>
+    const boardEl = document.getElementById('board');
+    const statusEl = document.getElementById('status');
+    const turnEl = document.getElementById('turn');
+    const leaderboardEl = document.getElementById('leaderboard');
+    const joinButton = document.getElementById('join');
+    const usernameInput = document.getElementById('username');
+    const gameSection = document.getElementById('game');
+
+    let socket;
+    let currentState;
+    let username = '';
+
+    function buildBoard(board) {
+      boardEl.innerHTML = '';
+      board.forEach((row, rowIndex) => {
+        row.forEach((cell, colIndex) => {
+          const div = document.createElement('div');
+          div.className = 'cell';
+          if (cell === 1) div.classList.add('player1');
+          if (cell === 2) div.classList.add('player2');
+          div.addEventListener('click', () => sendMove(colIndex));
+          boardEl.appendChild(div);
+        });
+      });
+    }
+
+    function updateState(state) {
+      currentState = state;
+      buildBoard(state.board);
+      if (state.status === 'finished') {
+        if (state.winner) {
+          statusEl.textContent = `Winner: ${state.winner}`;
+        } else {
+          statusEl.textContent = 'Game ended in a draw.';
+        }
+      } else if (state.status === 'waiting') {
+        statusEl.textContent = 'Waiting for opponent or bot...';
+      } else {
+        statusEl.textContent = state.message || '';
+      }
+      turnEl.textContent = state.turn ? `Turn: ${state.turn}` : '';
+    }
+
+    function sendMove(col) {
+      if (!socket || socket.readyState !== WebSocket.OPEN) return;
+      if (!currentState || currentState.status !== 'active') return;
+      if (currentState.turn !== username) return;
+      socket.send(JSON.stringify({ type: 'move', column: col }));
+    }
+
+    function connect() {
+      socket = new WebSocket(`ws://${window.location.host}/ws`);
+      socket.addEventListener('open', () => {
+        socket.send(JSON.stringify({ type: 'join', username }));
+      });
+      socket.addEventListener('message', (event) => {
+        const data = JSON.parse(event.data);
+        if (data.type === 'state') {
+          updateState(data);
+          refreshLeaderboard();
+        } else if (data.type === 'status') {
+          statusEl.textContent = data.message;
+        } else if (data.type === 'error') {
+          statusEl.textContent = data.message;
+        }
+      });
+      socket.addEventListener('close', () => {
+        statusEl.textContent = 'Disconnected. Attempting to reconnect...';
+        setTimeout(connect, 1000);
+      });
+    }
+
+    function refreshLeaderboard() {
+      fetch('/api/leaderboard')
+        .then((res) => res.json())
+        .then((leaders) => {
+          leaderboardEl.innerHTML = '';
+          leaders.forEach((leader) => {
+            const li = document.createElement('li');
+            li.textContent = `${leader.username}: ${leader.wins}`;
+            leaderboardEl.appendChild(li);
+          });
+        })
+        .catch(() => {});
+    }
+
+    joinButton.addEventListener('click', () => {
+      username = usernameInput.value.trim();
+      if (!username) {
+        alert('Username required');
+        return;
+      }
+      gameSection.style.display = 'block';
+      connect();
+    });
+  </script>
+</body>
+</html>
