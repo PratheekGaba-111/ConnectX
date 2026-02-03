@@ -1,0 +1,59 @@
+body {
+  font-family: Arial, sans-serif;
+  margin: 24px;
+  background: #fafafa;
+}
+
+#board {
+  display: grid;
+  grid-template-columns: repeat(7, 48px);
+  gap: 6px;
+  margin: 16px 0;
+}
+
+.cell {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: #e0e0e0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: inset 0 0 2px rgba(0, 0, 0, 0.2);
+}
+
+.cell.player1 {
+  background: #ff6b6b;
+}
+
+.cell.player2 {
+  background: #4d96ff;
+}
+
+#status {
+  margin-top: 12px;
+  min-height: 20px;
+}
+
+#timer {
+  font-weight: bold;
+  margin-top: 8px;
+}
+
+#controls {
+  margin-top: 12px;
+}
+
+button {
+  padding: 8px 12px;
+  border: none;
+  border-radius: 6px;
+  background: #222;
+  color: #fff;
+  cursor: pointer;
+}
+
+button:hover {
+  background: #444;
+}

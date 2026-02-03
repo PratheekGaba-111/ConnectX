@@ -30,7 +30,8 @@ KAFKA_BROKERS=localhost:9092 go run ./cmd/analytics
 ```
 
 ## Project structure
-- `cmd/server` - main HTTP + WebSocket server
+- `cmd/server` - app entry point
 - `cmd/analytics` - Kafka consumer for analytics
-- `internal/game` - core game logic
-- `web` - static frontend
+- `internal/server` - server, lobby, WS, state, and game flow modules
+- `internal/game` - game rules, board logic, player/status types
+- `web` - static frontend (HTML, JS, CSS)
