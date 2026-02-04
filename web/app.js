@@ -78,10 +78,6 @@ function updateTimer() {
 function sendMove(col) {
   if (!socket || socket.readyState !== WebSocket.OPEN) return;
   if (!currentState || currentState.status !== 'active') return;
-  if (currentState.turn && currentState.turn !== username) {
-    statusEl.textContent = 'Not your turn.';
-    return;
-  }
   socket.send(JSON.stringify({ type: 'move', column: col }));
 }
 
