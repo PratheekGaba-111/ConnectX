@@ -14,8 +14,9 @@ func (s *Server) attachPlayer(username string, conn *websocket.Conn) (*game.Play
 	defer s.mu.Unlock()
 	if existingConn, ok := s.connections[username]; ok {
 		if existingConn != nil {
-			_ = conn.WriteJSON(map[string]string{"type": "error", "message": "username already connected"})
-			return nil, nil, false
+			_ = existingConn.WriteJSON(map[string]string{"type": "status", "message": "Reconnected from another session."})
+			_ = existingConn.Close()
+			s.connections[username] = nil
 		}
 	}
 

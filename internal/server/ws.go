@@ -5,6 +5,8 @@ import (
 	"net/http"
 	"strings"
 
+	"connectx/internal/game"
+
 	"github.com/gorilla/websocket"
 )
 
@@ -52,11 +54,29 @@ func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
 			s.handleDisconnect(player.Username)
 			return
 		}
+		var activeGame *game.Game
+		s.mu.Lock()
+		for _, g := range s.games {
+			for _, p := range g.Players {
+				if p != nil && p.Username == player.Username {
+					activeGame = g
+					break
+				}
+			}
+			if activeGame != nil {
+				break
+			}
+		}
+		s.mu.Unlock()
 		switch msg.Type {
 		case "move":
-			s.handleMove(gameInstance, player, msg.Column)
+			if activeGame != nil {
+				s.handleMove(activeGame, player, msg.Column)
+			}
 		case "reset":
-			s.handleReset(gameInstance, player)
+			if activeGame != nil {
+				s.handleReset(activeGame, player)
+			}
 		}
 	}
 }
