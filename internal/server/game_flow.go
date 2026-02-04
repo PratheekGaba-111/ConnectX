@@ -6,6 +6,8 @@ import (
 	"time"
 
 	"connectx/internal/game"
+
+	"github.com/gorilla/websocket"
 )
 
 func (s *Server) handleMove(g *game.Game, player *game.Player, col int) {
@@ -146,15 +148,15 @@ func (s *Server) finalizeGame(g *game.Game) {
 			}
 		}
 	}
-	if err := s.saveGame(g, winner); err != nil {
-		log.Printf("save game error: %v", err)
+	if err := s.recordWin(winner); err != nil {
+		log.Printf("record win error: %v", err)
 	}
 	go s.emitEvent("game_completed", g, winner)
+	s.cleanupGame(g)
 }
 
 func (s *Server) handleReset(g *game.Game, player *game.Player) {
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	if g != nil {
 		if g.Status == game.StatusActive {
 			g.Status = game.StatusFinished
@@ -167,41 +169,46 @@ func (s *Server) handleReset(g *game.Game, player *game.Player) {
 		s.sendState(g, fmt.Sprintf("%s started a new match.", player.Username), false)
 		s.stopTurnTimer(g.ID)
 		go s.emitEvent("game_reset", g, player.Username)
-		if err := s.saveGame(g, ""); err != nil {
-			log.Printf("save game error: %v", err)
-		}
 	}
-	player.Online = true
-	if s.waiting == nil {
-		s.waiting = player
-		player.ID = 1
-		waitingGame := game.NewWaitingGame(randomID(), player)
-		s.games[waitingGame.ID] = waitingGame
-		s.waitingTimer = time.AfterFunc(10*time.Second, func() {
-			s.startBotGame(player.Username)
-		})
-		s.announceStatus(player.Username, "Looking for a new opponent...")
+	s.mu.Unlock()
+	s.cleanupGame(g)
+}
+
+func (s *Server) cleanupGame(g *game.Game) {
+	if g == nil {
 		return
 	}
-	opponent := s.waiting
-	if s.waitingTimer != nil {
-		s.waitingTimer.Stop()
-		s.waitingTimer = nil
+	var conns []*websocket.Conn
+	var usernames []string
+	s.mu.Lock()
+	delete(s.games, g.ID)
+	for _, p := range g.Players {
+		if p == nil || p.IsBot {
+			continue
+		}
+		usernames = append(usernames, p.Username)
+		if timer, ok := s.forfeitTimers[p.Username]; ok {
+			timer.Stop()
+			delete(s.forfeitTimers, p.Username)
+		}
+		if conn, ok := s.connections[p.Username]; ok && conn != nil {
+			conns = append(conns, conn)
+			s.connections[p.Username] = nil
+		}
+		delete(s.disconnectAt, p.Username)
 	}
-	s.waiting = nil
-	player.ID = 2
-	opponent.ID = 1
-	newGame := s.findGameByPlayer(opponent.Username)
-	if newGame == nil {
-		newGame = game.NewGame(randomID(), opponent, player)
-		s.games[newGame.ID] = newGame
-	} else {
-		newGame.Players[1] = player
-		newGame.Status = game.StatusActive
-		newGame.StartedAt = time.Now()
-		newGame.TurnStartedAt = time.Now()
+	s.mu.Unlock()
+	if err := s.deleteGameRecord(g.ID); err != nil {
+		log.Printf("delete game error: %v", err)
 	}
-	go s.emitEvent("game_started", newGame, "")
-	s.sendState(newGame, "New match started!", false)
-	s.startTurnTimer(newGame)
+	for i, conn := range conns {
+		username := ""
+		if i < len(usernames) {
+			username = usernames[i]
+		}
+		if username != "" {
+			_ = conn.WriteJSON(map[string]string{"type": "status", "message": "Game completed. Please join again to start a new session."})
+		}
+		_ = conn.Close()
+	}
 }
