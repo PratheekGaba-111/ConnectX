@@ -72,7 +72,6 @@ function updateTimer() {
 function sendMove(col) {
   if (!socket || socket.readyState !== WebSocket.OPEN) return;
   if (!currentState || currentState.status !== 'active') return;
-  if (currentState.turn !== username) return;
   socket.send(JSON.stringify({ type: 'move', column: col }));
 }
 
