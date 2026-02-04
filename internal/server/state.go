@@ -99,19 +99,22 @@ func initDB(db *sql.DB) error {
 			started_at DATETIME,
 			ended_at DATETIME
 		);
+		CREATE TABLE IF NOT EXISTS leaderboard (
+			username TEXT PRIMARY KEY,
+			wins INTEGER NOT NULL DEFAULT 0
+		);
 	`)
 	return err
 }
 
-func (s *Server) saveGame(g *game.Game, winner string) error {
+func (s *Server) recordWin(username string) error {
+	if username == "" {
+		return nil
+	}
 	_, err := s.db.Exec(
-		"INSERT OR REPLACE INTO games (id, player1, player2, winner, started_at, ended_at) VALUES (?, ?, ?, ?, ?, ?)",
-		g.ID,
-		g.Players[0].Username,
-		g.Players[1].Username,
-		winner,
-		g.StartedAt,
-		g.EndedAt,
+		`INSERT INTO leaderboard (username, wins) VALUES (?, 1)
+		ON CONFLICT(username) DO UPDATE SET wins = wins + 1`,
+		username,
 	)
 	return err
 }
@@ -162,10 +165,8 @@ func (s *Server) handleLeaderboard(w http.ResponseWriter, r *http.Request) {
 	s.leaderboardMux.Lock()
 	defer s.leaderboardMux.Unlock()
 	rows, err := s.db.Query(`
-		SELECT winner, COUNT(*) as wins
-		FROM games
-		WHERE winner IS NOT NULL AND winner != ''
-		GROUP BY winner
+		SELECT username, wins
+		FROM leaderboard
 		ORDER BY wins DESC
 		LIMIT 10
 	`)

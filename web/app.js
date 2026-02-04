@@ -67,7 +67,6 @@ function updateTimer() {
 function sendMove(col) {
   if (!socket || socket.readyState !== WebSocket.OPEN) return;
   if (!currentState || currentState.status !== 'active') return;
-  if (currentState.turn !== username) return;
   socket.send(JSON.stringify({ type: 'move', column: col }));
 }
 
@@ -77,6 +76,9 @@ function sendReset() {
 }
 
 function connect() {
+  if (socket && socket.readyState === WebSocket.OPEN) {
+    socket.close();
+  }
   socket = new WebSocket(`ws://${window.location.host}/ws`);
   socket.addEventListener('open', () => {
     socket.send(JSON.stringify({ type: 'join', username }));
@@ -112,14 +114,21 @@ function refreshLeaderboard() {
     .catch(() => {});
 }
 
-joinButton.addEventListener('click', () => {
-  username = usernameInput.value.trim();
+function startSession() {
+  const requested = usernameInput.value.trim();
+  if (requested) {
+    username = requested;
+  }
   if (!username) {
     alert('Username required');
     return;
   }
   gameSection.style.display = 'block';
   connect();
+}
+
+joinButton.addEventListener('click', () => {
+  startSession();
 });
 
 resetButton.addEventListener('click', () => {

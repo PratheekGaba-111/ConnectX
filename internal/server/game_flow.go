@@ -146,62 +146,80 @@ func (s *Server) finalizeGame(g *game.Game) {
 			}
 		}
 	}
-	if err := s.saveGame(g, winner); err != nil {
-		log.Printf("save game error: %v", err)
+	if err := s.recordWin(winner); err != nil {
+		log.Printf("record win error: %v", err)
 	}
 	go s.emitEvent("game_completed", g, winner)
 }
 
 func (s *Server) handleReset(g *game.Game, player *game.Player) {
 	s.mu.Lock()
-	defer s.mu.Unlock()
-	if g != nil {
-		if g.Status == game.StatusActive {
-			g.Status = game.StatusFinished
-			g.EndedAt = time.Now()
-			opponent := g.Players[(player.ID)%2]
-			if opponent != nil {
-				g.WinnerID = opponent.ID
-			}
-		}
-		s.sendState(g, fmt.Sprintf("%s started a new match.", player.Username), false)
-		s.stopTurnTimer(g.ID)
-		go s.emitEvent("game_reset", g, player.Username)
-		if err := s.saveGame(g, ""); err != nil {
-			log.Printf("save game error: %v", err)
-		}
-	}
-	player.Online = true
-	if s.waiting == nil {
-		s.waiting = player
-		player.ID = 1
-		waitingGame := game.NewWaitingGame(randomID(), player)
-		s.games[waitingGame.ID] = waitingGame
-		s.waitingTimer = time.AfterFunc(10*time.Second, func() {
-			s.startBotGame(player.Username)
-		})
-		s.announceStatus(player.Username, "Looking for a new opponent...")
+	if g == nil {
+		s.mu.Unlock()
 		return
 	}
-	opponent := s.waiting
-	if s.waitingTimer != nil {
-		s.waitingTimer.Stop()
-		s.waitingTimer = nil
+	wasFinished := g.Status == game.StatusFinished
+	if g.Status == game.StatusActive {
+		g.Status = game.StatusFinished
+		g.EndedAt = time.Now()
+		opponent := g.Players[(player.ID)%2]
+		if opponent != nil {
+			g.WinnerID = opponent.ID
+		}
 	}
-	s.waiting = nil
-	player.ID = 2
-	opponent.ID = 1
-	newGame := s.findGameByPlayer(opponent.Username)
-	if newGame == nil {
-		newGame = game.NewGame(randomID(), opponent, player)
-		s.games[newGame.ID] = newGame
-	} else {
-		newGame.Players[1] = player
-		newGame.Status = game.StatusActive
-		newGame.StartedAt = time.Now()
-		newGame.TurnStartedAt = time.Now()
+	s.sendState(g, fmt.Sprintf("%s requested a rematch.", player.Username), false)
+	s.stopTurnTimer(g.ID)
+	go s.emitEvent("game_reset", g, player.Username)
+	s.mu.Unlock()
+	if !wasFinished && g.Status == game.StatusFinished {
+		s.finalizeGame(g)
 	}
+	s.requestRematch(g, player)
+}
+
+func (s *Server) requestRematch(g *game.Game, player *game.Player) {
+	if g.Status != game.StatusFinished {
+		return
+	}
+	s.mu.Lock()
+	requests, ok := s.rematchRequests[g.ID]
+	if !ok {
+		requests = make(map[string]bool)
+		s.rematchRequests[g.ID] = requests
+	}
+	requests[player.Username] = true
+	p1 := g.Players[0]
+	p2 := g.Players[1]
+	ready := p1 != nil && p2 != nil && requests[p1.Username] && requests[p2.Username]
+	s.mu.Unlock()
+
+	if !ready {
+		s.sendMessage(player.Username, "status", "Waiting for opponent to accept rematch...")
+		return
+	}
+	s.startRematch(g)
+}
+
+func (s *Server) startRematch(oldGame *game.Game) {
+	if oldGame == nil {
+		return
+	}
+	s.mu.Lock()
+	delete(s.rematchRequests, oldGame.ID)
+	p1 := oldGame.Players[0]
+	p2 := oldGame.Players[1]
+	if p1 == nil || p2 == nil {
+		s.mu.Unlock()
+		return
+	}
+	p1.ID = 1
+	p2.ID = 2
+	newGame := game.NewGame(randomID(), p1, p2)
+	delete(s.games, oldGame.ID)
+	s.games[newGame.ID] = newGame
+	s.mu.Unlock()
+
 	go s.emitEvent("game_started", newGame, "")
-	s.sendState(newGame, "New match started!", false)
+	s.sendState(newGame, "New match started!", p2.IsBot)
 	s.startTurnTimer(newGame)
 }

@@ -15,17 +15,18 @@ import (
 )
 
 type Server struct {
-	mu             sync.Mutex
-	waiting        *game.Player
-	waitingTimer   *time.Timer
-	games          map[string]*game.Game
-	connections    map[string]*websocket.Conn
-	disconnectAt   map[string]time.Time
-	forfeitTimers  map[string]*time.Timer
-	turnTimers     map[string]*time.Timer
-	db             *sql.DB
-	kafkaWriter    *kafka.Writer
-	leaderboardMux sync.Mutex
+	mu              sync.Mutex
+	waiting         *game.Player
+	waitingTimer    *time.Timer
+	games           map[string]*game.Game
+	connections     map[string]*websocket.Conn
+	disconnectAt    map[string]time.Time
+	forfeitTimers   map[string]*time.Timer
+	turnTimers      map[string]*time.Timer
+	rematchRequests map[string]map[string]bool
+	db              *sql.DB
+	kafkaWriter     *kafka.Writer
+	leaderboardMux  sync.Mutex
 }
 
 func New() (*Server, func(), error) {
@@ -39,13 +40,14 @@ func New() (*Server, func(), error) {
 	}
 	writer := newKafkaWriter()
 	srv := &Server{
-		games:         make(map[string]*game.Game),
-		connections:   make(map[string]*websocket.Conn),
-		disconnectAt:  make(map[string]time.Time),
-		forfeitTimers: make(map[string]*time.Timer),
-		turnTimers:    make(map[string]*time.Timer),
-		db:            db,
-		kafkaWriter:   writer,
+		games:           make(map[string]*game.Game),
+		connections:     make(map[string]*websocket.Conn),
+		disconnectAt:    make(map[string]time.Time),
+		forfeitTimers:   make(map[string]*time.Timer),
+		turnTimers:      make(map[string]*time.Timer),
+		rematchRequests: make(map[string]map[string]bool),
+		db:              db,
+		kafkaWriter:     writer,
 	}
 	cleanup := func() {
 		if writer != nil {
