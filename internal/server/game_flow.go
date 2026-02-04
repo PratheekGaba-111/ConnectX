@@ -188,15 +188,28 @@ func (s *Server) requestRematch(g *game.Game, player *game.Player) {
 		s.rematchRequests[g.ID] = requests
 	}
 	requests[player.Username] = true
-	if _, ok := s.rematchRequesters[g.ID]; !ok {
+	requester, hasRequester := s.rematchRequesters[g.ID]
+	if !hasRequester {
 		s.rematchRequesters[g.ID] = player.Username
+		requester = player.Username
 	}
 	p1 := g.Players[0]
 	p2 := g.Players[1]
 	ready := p1 != nil && p2 != nil && requests[p1.Username] && requests[p2.Username]
 	opponent := otherPlayerUsername(g, player.Username)
-	if opponent != "" {
+	isBotOpponent := opponent == "Bot"
+	if !hasRequester && opponent != "" && !isBotOpponent {
 		s.sendMessage(opponent, "rematch_request", "Opponent wants a rematch.")
+	}
+	if hasRequester && requester == player.Username {
+		s.mu.Unlock()
+		s.sendMessage(player.Username, "status", "Rematch request already sent.")
+		return
+	}
+	if isBotOpponent {
+		s.mu.Unlock()
+		s.startRematch(g)
+		return
 	}
 	if _, ok := s.rematchTimers[g.ID]; !ok {
 		gameID := g.ID
@@ -219,6 +232,7 @@ func (s *Server) startRematch(oldGame *game.Game) {
 	if oldGame == nil {
 		return
 	}
+	s.clearRematchTimer(oldGame.ID)
 	s.mu.Lock()
 	delete(s.rematchRequests, oldGame.ID)
 	p1 := oldGame.Players[0]
@@ -244,6 +258,12 @@ func (s *Server) handleRematchAccept(g *game.Game, player *game.Player) {
 		return
 	}
 	s.mu.Lock()
+	requester := s.rematchRequesters[g.ID]
+	if requester == "" || requester == player.Username {
+		s.mu.Unlock()
+		s.sendMessage(player.Username, "status", "No rematch request to accept.")
+		return
+	}
 	requests, ok := s.rematchRequests[g.ID]
 	if !ok {
 		requests = make(map[string]bool)
@@ -256,6 +276,7 @@ func (s *Server) handleRematchAccept(g *game.Game, player *game.Player) {
 	s.mu.Unlock()
 	if ready {
 		s.clearRematchTimer(g.ID)
+		s.sendMessage(requester, "status", "Opponent accepted rematch.")
 		s.startRematch(g)
 	}
 }
@@ -264,26 +285,39 @@ func (s *Server) handleRematchReject(g *game.Game, player *game.Player) {
 	if g == nil || player == nil {
 		return
 	}
-	s.clearRematchTimer(g.ID)
 	s.mu.Lock()
 	requester := s.rematchRequesters[g.ID]
+	if requester == "" || requester == player.Username {
+		s.mu.Unlock()
+		s.sendMessage(player.Username, "status", "No rematch request to reject.")
+		return
+	}
 	delete(s.rematchRequests, g.ID)
 	delete(s.rematchRequesters, g.ID)
 	s.mu.Unlock()
+	s.clearRematchTimer(g.ID)
 	if requester != "" {
 		s.sendMessage(requester, "status", "Opponent left.")
 	}
+	s.sendMessage(player.Username, "status", "Rematch declined.")
 }
 
 func (s *Server) handleRematchTimeout(gameID string) {
+	var opponent string
 	s.mu.Lock()
 	requester := s.rematchRequesters[gameID]
+	if g, ok := s.games[gameID]; ok {
+		opponent = otherPlayerUsername(g, requester)
+	}
 	delete(s.rematchRequests, gameID)
 	delete(s.rematchRequesters, gameID)
 	delete(s.rematchTimers, gameID)
 	s.mu.Unlock()
 	if requester != "" {
 		s.sendMessage(requester, "status", "Opponent left.")
+	}
+	if opponent != "" {
+		s.sendMessage(opponent, "status", "Rematch request expired.")
 	}
 }
 
