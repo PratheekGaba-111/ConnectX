@@ -77,6 +77,8 @@ func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
 			if activeGame != nil {
 				s.handleReset(activeGame, player)
 			}
+		case "new_game":
+			s.handleNewGame(player)
 		}
 	}
 }

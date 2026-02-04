@@ -24,6 +24,7 @@ type Server struct {
 	forfeitTimers   map[string]*time.Timer
 	turnTimers      map[string]*time.Timer
 	rematchRequests map[string]map[string]bool
+	players         map[string]*game.Player
 	db              *sql.DB
 	kafkaWriter     *kafka.Writer
 	leaderboardMux  sync.Mutex
@@ -46,6 +47,7 @@ func New() (*Server, func(), error) {
 		forfeitTimers:   make(map[string]*time.Timer),
 		turnTimers:      make(map[string]*time.Timer),
 		rematchRequests: make(map[string]map[string]bool),
+		players:         make(map[string]*game.Player),
 		db:              db,
 		kafkaWriter:     writer,
 	}

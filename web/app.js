@@ -6,12 +6,14 @@ const leaderboardEl = document.getElementById('leaderboard');
 const joinButton = document.getElementById('join');
 const usernameInput = document.getElementById('username');
 const gameSection = document.getElementById('game');
+const newGameButton = document.getElementById('new-game');
 const resetButton = document.getElementById('reset');
 
 let socket;
 let currentState;
 let username = '';
 let countdownInterval;
+let isLoggedIn = false;
 
 function buildBoard(board) {
   boardEl.innerHTML = '';
@@ -82,6 +84,7 @@ function connect() {
   socket = new WebSocket(`ws://${window.location.host}/ws`);
   socket.addEventListener('open', () => {
     socket.send(JSON.stringify({ type: 'join', username }));
+    isLoggedIn = true;
   });
   socket.addEventListener('message', (event) => {
     const data = JSON.parse(event.data);
@@ -95,6 +98,7 @@ function connect() {
     }
   });
   socket.addEventListener('close', () => {
+    isLoggedIn = false;
     statusEl.textContent = 'Disconnected. Attempting to reconnect...';
     setTimeout(connect, 1000);
   });
@@ -114,6 +118,11 @@ function refreshLeaderboard() {
     .catch(() => {});
 }
 
+function sendNewGame() {
+  if (!socket || socket.readyState !== WebSocket.OPEN) return;
+  socket.send(JSON.stringify({ type: 'new_game' }));
+}
+
 function startSession() {
   const requested = usernameInput.value.trim();
   if (requested) {
@@ -129,6 +138,14 @@ function startSession() {
 
 joinButton.addEventListener('click', () => {
   startSession();
+});
+
+newGameButton.addEventListener('click', () => {
+  if (!isLoggedIn) {
+    alert('Please login first.');
+    return;
+  }
+  sendNewGame();
 });
 
 resetButton.addEventListener('click', () => {

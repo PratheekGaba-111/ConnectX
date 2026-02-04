@@ -36,43 +36,98 @@ func (s *Server) attachPlayer(username string, conn *websocket.Conn) (*game.Play
 		}
 	}
 
-	player := &game.Player{Username: username, ID: 1, Online: true, ConnID: username}
+	player, ok := s.players[username]
+	if !ok {
+		player = &game.Player{Username: username, ID: 1, Online: true, ConnID: username}
+		s.players[username] = player
+	} else {
+		player.Online = true
+		player.ConnID = username
+	}
 	s.connections[username] = conn
+	go s.announceStatus(username, "Logged in. Click New Game to find an opponent.")
+	return player, nil, false
+}
 
+func (s *Server) handleNewGame(player *game.Player) {
+	if player == nil {
+		return
+	}
+	var notifyOpponent string
+	var oldGame *game.Game
+	var shouldFinalize bool
+	s.mu.Lock()
+	for _, g := range s.games {
+		for _, p := range g.Players {
+			if p != nil && p.Username == player.Username {
+				oldGame = g
+				break
+			}
+		}
+		if oldGame != nil {
+			break
+		}
+	}
+	if oldGame != nil {
+		delete(s.rematchRequests, oldGame.ID)
+		s.stopTurnTimer(oldGame.ID)
+		opponent := oldGame.Players[(player.ID)%2]
+		if opponent != nil && !opponent.IsBot {
+			notifyOpponent = opponent.Username
+		}
+		if oldGame.Status == game.StatusActive {
+			oldGame.Status = game.StatusFinished
+			oldGame.EndedAt = time.Now()
+			if opponent != nil {
+				oldGame.WinnerID = opponent.ID
+			}
+			shouldFinalize = true
+		}
+		delete(s.games, oldGame.ID)
+	}
+
+	var gameInstance *game.Game
 	if s.waiting == nil {
 		s.waiting = player
 		player.ID = 1
 		waitingGame := game.NewWaitingGame(randomID(), player)
 		s.games[waitingGame.ID] = waitingGame
 		s.waitingTimer = time.AfterFunc(10*time.Second, func() {
-			s.startBotGame(username)
+			s.startBotGame(player.Username)
 		})
-		go s.announceStatus(username, "Waiting for opponent...")
-		return player, waitingGame, false
-	}
-
-	opponent := s.waiting
-	if s.waitingTimer != nil {
-		s.waitingTimer.Stop()
-		s.waitingTimer = nil
-	}
-	s.waiting = nil
-
-	player.ID = 2
-	opponent.ID = 1
-	gameInstance := s.findGameByPlayer(opponent.Username)
-	if gameInstance == nil {
+		gameInstance = waitingGame
+	} else {
+		opponent := s.waiting
+		if s.waitingTimer != nil {
+			s.waitingTimer.Stop()
+			s.waitingTimer = nil
+		}
+		s.waiting = nil
+		player.ID = 2
+		opponent.ID = 1
 		gameInstance = game.NewGame(randomID(), opponent, player)
 		s.games[gameInstance.ID] = gameInstance
-	} else {
-		gameInstance.Players[1] = player
-		gameInstance.Status = game.StatusActive
-		gameInstance.StartedAt = time.Now()
-		gameInstance.TurnStartedAt = time.Now()
+	}
+	s.mu.Unlock()
+
+	if notifyOpponent != "" {
+		s.sendMessage(notifyOpponent, "status", "Opponent left. Start a new game to keep playing.")
+	}
+	if shouldFinalize {
+		s.finalizeGame(oldGame)
+	}
+	if gameInstance == nil {
+		return
+	}
+	if gameInstance.Status == game.StatusWaiting {
+		s.sendState(gameInstance, "", false)
+		s.announceStatus(player.Username, "Waiting for opponent...")
+		return
 	}
 	go s.emitEvent("game_started", gameInstance, "")
+	botGame := gameInstance.Players[0].IsBot || gameInstance.Players[1].IsBot
+	s.sendState(gameInstance, "New match started!", botGame)
 	s.startTurnTimer(gameInstance)
-	return player, gameInstance, false
 }
 
 func (s *Server) startBotGame(username string) {
