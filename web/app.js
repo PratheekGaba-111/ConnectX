@@ -12,6 +12,7 @@ let socket;
 let currentState;
 let username = '';
 let countdownInterval;
+let shouldReconnect = true;
 
 function buildBoard(board) {
   boardEl.innerHTML = '';
@@ -35,6 +36,10 @@ function updateState(state) {
       statusEl.textContent = `Winner: ${state.winner}`;
     } else {
       statusEl.textContent = 'Game ended in a draw.';
+    }
+    shouldReconnect = false;
+    if (socket && socket.readyState === WebSocket.OPEN) {
+      socket.close();
     }
   } else if (state.status === 'waiting') {
     statusEl.textContent = 'Waiting for opponent or bot...';
@@ -67,16 +72,13 @@ function updateTimer() {
 function sendMove(col) {
   if (!socket || socket.readyState !== WebSocket.OPEN) return;
   if (!currentState || currentState.status !== 'active') return;
-  if (currentState.turn !== username) return;
   socket.send(JSON.stringify({ type: 'move', column: col }));
 }
 
-function sendReset() {
-  if (!socket || socket.readyState !== WebSocket.OPEN) return;
-  socket.send(JSON.stringify({ type: 'reset' }));
-}
-
 function connect() {
+  if (socket && socket.readyState === WebSocket.OPEN) {
+    socket.close();
+  }
   socket = new WebSocket(`ws://${window.location.host}/ws`);
   socket.addEventListener('open', () => {
     socket.send(JSON.stringify({ type: 'join', username }));
@@ -93,6 +95,10 @@ function connect() {
     }
   });
   socket.addEventListener('close', () => {
+    if (!shouldReconnect) {
+      statusEl.textContent = 'Disconnected. Click Join or Play Again to start a new game.';
+      return;
+    }
     statusEl.textContent = 'Disconnected. Attempting to reconnect...';
     setTimeout(connect, 1000);
   });
@@ -112,16 +118,24 @@ function refreshLeaderboard() {
     .catch(() => {});
 }
 
-joinButton.addEventListener('click', () => {
-  username = usernameInput.value.trim();
+function startSession() {
+  const requested = usernameInput.value.trim();
+  if (requested) {
+    username = requested;
+  }
   if (!username) {
     alert('Username required');
     return;
   }
+  shouldReconnect = true;
   gameSection.style.display = 'block';
   connect();
+}
+
+joinButton.addEventListener('click', () => {
+  startSession();
 });
 
 resetButton.addEventListener('click', () => {
-  sendReset();
+  startSession();
 });
