@@ -79,6 +79,17 @@ func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
 			}
 		case "new_game":
 			s.handleNewGame(player)
+		case "rematch_accept":
+			if activeGame != nil {
+				s.handleRematchAccept(activeGame, player)
+			}
+		case "rematch_reject":
+			if activeGame != nil {
+				s.handleRematchReject(activeGame, player)
+			}
+		case "logout":
+			s.handleLogout(player)
+			return
 		}
 	}
 }

@@ -70,6 +70,11 @@ func (s *Server) handleNewGame(player *game.Player) {
 	}
 	if oldGame != nil {
 		delete(s.rematchRequests, oldGame.ID)
+		if timer, ok := s.rematchTimers[oldGame.ID]; ok {
+			timer.Stop()
+			delete(s.rematchTimers, oldGame.ID)
+		}
+		delete(s.rematchRequesters, oldGame.ID)
 		s.stopTurnTimer(oldGame.ID)
 		opponent := oldGame.Players[(player.ID)%2]
 		if opponent != nil && !opponent.IsBot {
@@ -128,6 +133,54 @@ func (s *Server) handleNewGame(player *game.Player) {
 	botGame := gameInstance.Players[0].IsBot || gameInstance.Players[1].IsBot
 	s.sendState(gameInstance, "New match started!", botGame)
 	s.startTurnTimer(gameInstance)
+}
+
+func (s *Server) handleLogout(player *game.Player) {
+	if player == nil {
+		return
+	}
+	username := player.Username
+	var conn *websocket.Conn
+	var waitingCleared bool
+	s.mu.Lock()
+	if s.waiting != nil && s.waiting.Username == username {
+		s.waiting = nil
+		waitingCleared = true
+		if s.waitingTimer != nil {
+			s.waitingTimer.Stop()
+			s.waitingTimer = nil
+		}
+	}
+	for id, g := range s.games {
+		for _, p := range g.Players {
+			if p != nil && p.Username == username && g.Status == game.StatusWaiting {
+				delete(s.games, id)
+				break
+			}
+		}
+	}
+	if activeGame := s.findGameByPlayer(username); activeGame != nil {
+		delete(s.rematchRequests, activeGame.ID)
+		delete(s.rematchRequesters, activeGame.ID)
+		if timer, ok := s.rematchTimers[activeGame.ID]; ok {
+			timer.Stop()
+			delete(s.rematchTimers, activeGame.ID)
+		}
+	}
+	if existingConn, ok := s.connections[username]; ok {
+		conn = existingConn
+		s.connections[username] = nil
+	}
+	s.mu.Unlock()
+
+	if waitingCleared {
+		s.announceStatus(username, "Left the queue.")
+	}
+	s.handleDisconnect(username)
+	if conn != nil {
+		_ = conn.WriteJSON(map[string]string{"type": "status", "message": "Logged out."})
+		_ = conn.Close()
+	}
 }
 
 func (s *Server) startBotGame(username string) {

@@ -4,16 +4,22 @@ const turnEl = document.getElementById('turn');
 const timerEl = document.getElementById('timer');
 const leaderboardEl = document.getElementById('leaderboard');
 const joinButton = document.getElementById('join');
+const logoutButton = document.getElementById('logout');
 const usernameInput = document.getElementById('username');
+const loginSection = document.getElementById('login');
 const gameSection = document.getElementById('game');
 const newGameButton = document.getElementById('new-game');
 const resetButton = document.getElementById('reset');
+const rematchPrompt = document.getElementById('rematch-prompt');
+const rematchAcceptButton = document.getElementById('rematch-accept');
+const rematchRejectButton = document.getElementById('rematch-reject');
 
 let socket;
 let currentState;
 let username = '';
 let countdownInterval;
 let isLoggedIn = false;
+let shouldReconnect = true;
 
 function buildBoard(board) {
   boardEl.innerHTML = '';
@@ -32,6 +38,9 @@ function buildBoard(board) {
 function updateState(state) {
   currentState = state;
   buildBoard(state.board);
+  if (state.status === 'active') {
+    rematchPrompt.style.display = 'none';
+  }
   if (state.status === 'finished') {
     if (state.winner) {
       statusEl.textContent = `Winner: ${state.winner}`;
@@ -69,6 +78,10 @@ function updateTimer() {
 function sendMove(col) {
   if (!socket || socket.readyState !== WebSocket.OPEN) return;
   if (!currentState || currentState.status !== 'active') return;
+  if (currentState.turn && currentState.turn !== username) {
+    statusEl.textContent = 'Not your turn.';
+    return;
+  }
   socket.send(JSON.stringify({ type: 'move', column: col }));
 }
 
@@ -77,20 +90,43 @@ function sendReset() {
   socket.send(JSON.stringify({ type: 'reset' }));
 }
 
+function sendRematchAccept() {
+  if (!socket || socket.readyState !== WebSocket.OPEN) return;
+  socket.send(JSON.stringify({ type: 'rematch_accept' }));
+  rematchPrompt.style.display = 'none';
+}
+
+function sendRematchReject() {
+  if (!socket || socket.readyState !== WebSocket.OPEN) return;
+  socket.send(JSON.stringify({ type: 'rematch_reject' }));
+  rematchPrompt.style.display = 'none';
+}
+
+function sendLogout() {
+  if (!socket || socket.readyState !== WebSocket.OPEN) return;
+  socket.send(JSON.stringify({ type: 'logout' }));
+}
+
 function connect() {
   if (socket && socket.readyState === WebSocket.OPEN) {
     socket.close();
   }
+  shouldReconnect = true;
   socket = new WebSocket(`ws://${window.location.host}/ws`);
   socket.addEventListener('open', () => {
     socket.send(JSON.stringify({ type: 'join', username }));
     isLoggedIn = true;
+    loginSection.style.display = 'none';
+    gameSection.style.display = 'block';
   });
   socket.addEventListener('message', (event) => {
     const data = JSON.parse(event.data);
     if (data.type === 'state') {
       updateState(data);
       refreshLeaderboard();
+    } else if (data.type === 'rematch_request') {
+      rematchPrompt.style.display = 'block';
+      statusEl.textContent = data.message;
     } else if (data.type === 'status') {
       statusEl.textContent = data.message;
     } else if (data.type === 'error') {
@@ -99,6 +135,10 @@ function connect() {
   });
   socket.addEventListener('close', () => {
     isLoggedIn = false;
+    if (!shouldReconnect) {
+      statusEl.textContent = 'Logged out.';
+      return;
+    }
     statusEl.textContent = 'Disconnected. Attempting to reconnect...';
     setTimeout(connect, 1000);
   });
@@ -132,12 +172,25 @@ function startSession() {
     alert('Username required');
     return;
   }
-  gameSection.style.display = 'block';
   connect();
 }
 
 joinButton.addEventListener('click', () => {
   startSession();
+});
+
+logoutButton.addEventListener('click', () => {
+  shouldReconnect = false;
+  sendLogout();
+  if (socket) {
+    socket.close();
+  }
+  isLoggedIn = false;
+  currentState = null;
+  statusEl.textContent = 'Logged out.';
+  loginSection.style.display = 'block';
+  gameSection.style.display = 'none';
+  rematchPrompt.style.display = 'none';
 });
 
 newGameButton.addEventListener('click', () => {
@@ -150,4 +203,12 @@ newGameButton.addEventListener('click', () => {
 
 resetButton.addEventListener('click', () => {
   sendReset();
+});
+
+rematchAcceptButton.addEventListener('click', () => {
+  sendRematchAccept();
+});
+
+rematchRejectButton.addEventListener('click', () => {
+  sendRematchReject();
 });
