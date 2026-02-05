@@ -103,7 +103,6 @@ function sendMove(col) {
 
 function requestMove(col) {
   if (!socket || socket.readyState !== WebSocket.OPEN) return;
-  if (!currentState || currentState.status !== 'active') return;
   pendingConfirmColumn = col;
   moveConfirmText.textContent = `Confirm move in column ${col + 1}?`;
   moveConfirm.style.display = 'block';
