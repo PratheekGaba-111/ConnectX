@@ -295,7 +295,7 @@ func (s *Server) handleRematchReject(g *game.Game, player *game.Player) {
 	s.mu.Unlock()
 	s.clearRematchTimer(g.ID)
 	if requester != "" {
-		s.sendMessage(requester, "status", "Opponent left.")
+		s.sendMessage(requester, "status", "Opponent rejected your request. Please click New Game to play a match.")
 	}
 	s.sendMessage(player.Username, "status", "Rematch declined.")
 }
@@ -312,7 +312,7 @@ func (s *Server) handleRematchTimeout(gameID string) {
 	delete(s.rematchTimers, gameID)
 	s.mu.Unlock()
 	if requester != "" {
-		s.sendMessage(requester, "status", "Opponent left.")
+		s.sendMessage(requester, "status", "Rematch request expired. Please click New Game to play a match.")
 	}
 	if opponent != "" {
 		s.sendMessage(opponent, "status", "Rematch request expired.")

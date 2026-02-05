@@ -57,6 +57,7 @@ func (s *Server) handleNewGame(player *game.Player) {
 	var oldGame *game.Game
 	var shouldFinalize bool
 	s.mu.Lock()
+	s.removeFromQueueLocked(player.Username)
 	for _, g := range s.games {
 		for _, p := range g.Players {
 			if p != nil && p.Username == player.Username {
@@ -92,22 +93,11 @@ func (s *Server) handleNewGame(player *game.Player) {
 	}
 
 	var gameInstance *game.Game
-	if s.waiting == nil {
-		s.waiting = player
+	opponent := s.popWaitingLocked()
+	if opponent == nil {
 		player.ID = 1
-		waitingGame := game.NewWaitingGame(randomID(), player)
-		s.games[waitingGame.ID] = waitingGame
-		s.waitingTimer = time.AfterFunc(10*time.Second, func() {
-			s.startBotGame(player.Username)
-		})
-		gameInstance = waitingGame
+		gameInstance = s.addToQueueLocked(player)
 	} else {
-		opponent := s.waiting
-		if s.waitingTimer != nil {
-			s.waitingTimer.Stop()
-			s.waitingTimer = nil
-		}
-		s.waiting = nil
 		player.ID = 2
 		opponent.ID = 1
 		gameInstance = game.NewGame(randomID(), opponent, player)
@@ -143,14 +133,7 @@ func (s *Server) handleLogout(player *game.Player) {
 	var conn *websocket.Conn
 	var waitingCleared bool
 	s.mu.Lock()
-	if s.waiting != nil && s.waiting.Username == username {
-		s.waiting = nil
-		waitingCleared = true
-		if s.waitingTimer != nil {
-			s.waitingTimer.Stop()
-			s.waitingTimer = nil
-		}
-	}
+	waitingCleared = s.removeFromQueueLocked(username)
 	for id, g := range s.games {
 		for _, p := range g.Players {
 			if p != nil && p.Username == username && g.Status == game.StatusWaiting {
@@ -185,16 +168,25 @@ func (s *Server) handleLogout(player *game.Player) {
 
 func (s *Server) startBotGame(username string) {
 	s.mu.Lock()
-	defer s.mu.Unlock()
-	if s.waiting == nil || s.waiting.Username != username {
+	if len(s.waitingQueue) != 1 || s.waitingQueue[0] != username {
+		s.mu.Unlock()
 		return
 	}
-	player := s.waiting
-	s.waiting = nil
-
+	s.waitingQueue = s.waitingQueue[:0]
+	if timer, ok := s.waitingTimers[username]; ok {
+		timer.Stop()
+		delete(s.waitingTimers, username)
+	}
+	player, ok := s.players[username]
+	if !ok || player == nil {
+		s.deleteWaitingGameLocked(username)
+		s.mu.Unlock()
+		return
+	}
 	bot := &game.Player{Username: "Bot", ID: 2, IsBot: true, Online: true}
 	gameInstance := s.findGameByPlayer(player.Username)
-	if gameInstance == nil {
+	if gameInstance == nil || gameInstance.Status != game.StatusWaiting {
+		s.deleteWaitingGameLocked(username)
 		gameInstance = game.NewGame(randomID(), player, bot)
 		s.games[gameInstance.ID] = gameInstance
 	} else {
@@ -203,9 +195,73 @@ func (s *Server) startBotGame(username string) {
 		gameInstance.StartedAt = time.Now()
 		gameInstance.TurnStartedAt = time.Now()
 	}
+	s.mu.Unlock()
+
 	go s.emitEvent("game_started", gameInstance, "bot")
 	s.sendState(gameInstance, "Bot opponent joined", true)
 	s.startTurnTimer(gameInstance)
+}
+
+func (s *Server) addToQueueLocked(player *game.Player) *game.Game {
+	s.deleteWaitingGameLocked(player.Username)
+	s.waitingQueue = append(s.waitingQueue, player.Username)
+	if timer, ok := s.waitingTimers[player.Username]; ok {
+		timer.Stop()
+	}
+	s.waitingTimers[player.Username] = time.AfterFunc(10*time.Second, func() {
+		s.startBotGame(player.Username)
+	})
+	waitingGame := game.NewWaitingGame(randomID(), player)
+	s.games[waitingGame.ID] = waitingGame
+	return waitingGame
+}
+
+func (s *Server) popWaitingLocked() *game.Player {
+	for len(s.waitingQueue) > 0 {
+		username := s.waitingQueue[0]
+		s.waitingQueue = s.waitingQueue[1:]
+		if timer, ok := s.waitingTimers[username]; ok {
+			timer.Stop()
+			delete(s.waitingTimers, username)
+		}
+		player, ok := s.players[username]
+		s.deleteWaitingGameLocked(username)
+		if ok && player != nil && player.Online {
+			return player
+		}
+	}
+	return nil
+}
+
+func (s *Server) removeFromQueueLocked(username string) bool {
+	removed := false
+	for i, queued := range s.waitingQueue {
+		if queued == username {
+			s.waitingQueue = append(s.waitingQueue[:i], s.waitingQueue[i+1:]...)
+			removed = true
+			break
+		}
+	}
+	if timer, ok := s.waitingTimers[username]; ok {
+		timer.Stop()
+		delete(s.waitingTimers, username)
+	}
+	s.deleteWaitingGameLocked(username)
+	return removed
+}
+
+func (s *Server) deleteWaitingGameLocked(username string) {
+	for id, g := range s.games {
+		if g.Status != game.StatusWaiting {
+			continue
+		}
+		for _, p := range g.Players {
+			if p != nil && p.Username == username {
+				delete(s.games, id)
+				return
+			}
+		}
+	}
 }
 
 func (s *Server) findGameByPlayer(username string) *game.Game {

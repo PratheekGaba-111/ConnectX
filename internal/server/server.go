@@ -16,8 +16,8 @@ import (
 
 type Server struct {
 	mu                sync.Mutex
-	waiting           *game.Player
-	waitingTimer      *time.Timer
+	waitingQueue      []string
+	waitingTimers     map[string]*time.Timer
 	games             map[string]*game.Game
 	connections       map[string]*websocket.Conn
 	disconnectAt      map[string]time.Time
@@ -43,6 +43,7 @@ func New() (*Server, func(), error) {
 	}
 	writer := newKafkaWriter()
 	srv := &Server{
+		waitingTimers:     make(map[string]*time.Timer),
 		games:             make(map[string]*game.Game),
 		connections:       make(map[string]*websocket.Conn),
 		disconnectAt:      make(map[string]time.Time),
@@ -68,6 +69,7 @@ func (s *Server) Routes() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/ws", s.handleWS)
 	mux.HandleFunc("/api/leaderboard", s.handleLeaderboard)
+	mux.HandleFunc("/api/analytics", s.handleAnalytics)
 	mux.Handle("/", http.FileServer(http.Dir("./web")))
 	return mux
 }
