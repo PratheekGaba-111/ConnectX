@@ -97,8 +97,13 @@ func (s *Server) startTurnTimer(g *game.Game) {
 	if timer, ok := s.turnTimers[g.ID]; ok {
 		timer.Stop()
 	}
+	turnStartedAt := g.TurnStartedAt
+	currentPlayer := ""
+	if g.CurrentPlayer() != nil {
+		currentPlayer = g.CurrentPlayer().Username
+	}
 	s.turnTimers[g.ID] = time.AfterFunc(30*time.Second, func() {
-		s.handleTurnTimeout(g.ID)
+		s.handleTurnTimeout(g.ID, turnStartedAt, currentPlayer)
 	})
 }
 
@@ -109,15 +114,18 @@ func (s *Server) stopTurnTimer(gameID string) {
 	}
 }
 
-func (s *Server) handleTurnTimeout(gameID string) {
+func (s *Server) handleTurnTimeout(gameID string, turnStartedAt time.Time, currentPlayer string) {
 	s.mu.Lock()
 	gameInstance, ok := s.games[gameID]
 	s.mu.Unlock()
 	if !ok || gameInstance.Status != game.StatusActive {
 		return
 	}
+	if !gameInstance.TurnStartedAt.Equal(turnStartedAt) {
+		return
+	}
 	current := gameInstance.CurrentPlayer()
-	if current == nil || !current.Online || current.IsBot {
+	if current == nil || current.Username != currentPlayer || !current.Online || current.IsBot {
 		return
 	}
 	col := gameInstance.RandomValidColumn()
@@ -158,22 +166,13 @@ func (s *Server) handleReset(g *game.Game, player *game.Player) {
 		s.mu.Unlock()
 		return
 	}
-	wasFinished := g.Status == game.StatusFinished
-	if g.Status == game.StatusActive {
-		g.Status = game.StatusFinished
-		g.EndedAt = time.Now()
-		opponent := g.Players[(player.ID)%2]
-		if opponent != nil {
-			g.WinnerID = opponent.ID
-		}
+	if g.Status != game.StatusFinished {
+		s.mu.Unlock()
+		s.sendMessage(player.Username, "status", "Finish the game before requesting a rematch.")
+		return
 	}
 	s.sendState(g, fmt.Sprintf("%s requested a rematch.", player.Username), false)
-	s.stopTurnTimer(g.ID)
-	go s.emitEvent("game_reset", g, player.Username)
 	s.mu.Unlock()
-	if !wasFinished && g.Status == game.StatusFinished {
-		s.finalizeGame(g)
-	}
 	s.requestRematch(g, player)
 }
 
@@ -233,21 +232,22 @@ func (s *Server) startRematch(oldGame *game.Game) {
 	s.clearRematchTimer(oldGame.ID)
 	s.mu.Lock()
 	delete(s.rematchRequests, oldGame.ID)
-	p1 := oldGame.Players[0]
-	p2 := oldGame.Players[1]
-	if p1 == nil || p2 == nil {
+	first := oldGame.Players[1]
+	second := oldGame.Players[0]
+	if first == nil || second == nil {
 		s.mu.Unlock()
 		return
 	}
-	p1.ID = 1
-	p2.ID = 2
-	newGame := game.NewGame(randomID(), p1, p2)
+	first.ID = 1
+	second.ID = 2
+	newGame := game.NewGame(randomID(), first, second)
 	delete(s.games, oldGame.ID)
 	s.games[newGame.ID] = newGame
 	s.mu.Unlock()
 
 	go s.emitEvent("game_started", newGame, "")
-	s.sendState(newGame, "New match started!", p2.IsBot)
+	botGame := first.IsBot || second.IsBot
+	s.sendState(newGame, "New match started!", botGame)
 	s.startTurnTimer(newGame)
 }
 

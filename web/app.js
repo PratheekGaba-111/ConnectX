@@ -87,7 +87,12 @@ function updateTimer() {
 function sendMove(col) {
   if (!socket || socket.readyState !== WebSocket.OPEN) return;
   if (currentState && currentState.status === 'active' && currentState.turn === username) {
+    pendingMove = null;
     socket.send(JSON.stringify({ type: 'move', column: col }));
+    return;
+  }
+  if (!currentState || currentState.status !== 'active') {
+    statusEl.textContent = 'Game not active.';
     return;
   }
   pendingMove = col;
