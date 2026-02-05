@@ -198,13 +198,8 @@ func (s *Server) requestRematch(g *game.Game, player *game.Player) {
 	ready := p1 != nil && p2 != nil && requests[p1.Username] && requests[p2.Username]
 	opponent := otherPlayerUsername(g, player.Username)
 	isBotOpponent := opponent == "Bot"
-	if !hasRequester && opponent != "" && !isBotOpponent {
+	if opponent != "" && !isBotOpponent && !requests[opponent] {
 		s.sendMessage(opponent, "rematch_request", "Opponent wants a rematch.")
-	}
-	if hasRequester && requester == player.Username {
-		s.mu.Unlock()
-		s.sendMessage(player.Username, "status", "Rematch request already sent.")
-		return
 	}
 	if isBotOpponent {
 		s.mu.Unlock()
@@ -225,6 +220,9 @@ func (s *Server) requestRematch(g *game.Game, player *game.Player) {
 		return
 	}
 	s.clearRematchTimer(g.ID)
+	if hasRequester && requester != player.Username {
+		s.sendMessage(requester, "status", "Opponent accepted rematch.")
+	}
 	s.startRematch(g)
 }
 
