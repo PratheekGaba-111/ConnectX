@@ -10,10 +10,6 @@ const gameSection = document.getElementById('game');
 const newGameButton = document.getElementById('new-game');
 const resetButton = document.getElementById('reset');
 const logoutButton = document.getElementById('logout');
-const moveConfirm = document.getElementById('move-confirm');
-const moveConfirmText = document.getElementById('move-confirm-text');
-const moveConfirmYes = document.getElementById('move-confirm-yes');
-const moveConfirmNo = document.getElementById('move-confirm-no');
 const rematchPrompt = document.getElementById('rematch-prompt');
 const rematchAcceptButton = document.getElementById('rematch-accept');
 const rematchRejectButton = document.getElementById('rematch-reject');
@@ -25,7 +21,6 @@ let countdownInterval;
 let isLoggedIn = false;
 let shouldReconnect = true;
 let pendingMove = null;
-let pendingConfirmColumn = null;
 
 function buildBoard(board) {
   boardEl.innerHTML = '';
@@ -35,7 +30,7 @@ function buildBoard(board) {
       div.className = 'cell';
       if (cell === 1) div.classList.add('player1');
       if (cell === 2) div.classList.add('player2');
-      div.addEventListener('click', () => requestMove(colIndex));
+      div.addEventListener('click', () => sendMove(colIndex));
       boardEl.appendChild(div);
     });
   });
@@ -46,8 +41,6 @@ function updateState(state) {
   buildBoard(state.board);
   if (state.status !== 'active') {
     pendingMove = null;
-    pendingConfirmColumn = null;
-    moveConfirm.style.display = 'none';
   }
   if (state.status === 'active') {
     rematchPrompt.style.display = 'none';
@@ -99,26 +92,6 @@ function sendMove(col) {
   }
   pendingMove = col;
   statusEl.textContent = 'Move queued until your turn...';
-}
-
-function requestMove(col) {
-  if (!socket || socket.readyState !== WebSocket.OPEN) return;
-  pendingConfirmColumn = col;
-  moveConfirmText.textContent = `Confirm move in column ${col + 1}?`;
-  moveConfirm.style.display = 'block';
-}
-
-function confirmMove() {
-  if (pendingConfirmColumn === null) return;
-  const col = pendingConfirmColumn;
-  pendingConfirmColumn = null;
-  moveConfirm.style.display = 'none';
-  sendMove(col);
-}
-
-function cancelMove() {
-  pendingConfirmColumn = null;
-  moveConfirm.style.display = 'none';
 }
 
 function sendReset() {
@@ -247,12 +220,4 @@ rematchAcceptButton.addEventListener('click', () => {
 
 rematchRejectButton.addEventListener('click', () => {
   sendRematchReject();
-});
-
-moveConfirmYes.addEventListener('click', () => {
-  confirmMove();
-});
-
-moveConfirmNo.addEventListener('click', () => {
-  cancelMove();
 });
