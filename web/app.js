@@ -20,6 +20,7 @@ let username = '';
 let countdownInterval;
 let isLoggedIn = false;
 let shouldReconnect = true;
+let pendingMove = null;
 
 function buildBoard(board) {
   boardEl.innerHTML = '';
@@ -38,8 +39,16 @@ function buildBoard(board) {
 function updateState(state) {
   currentState = state;
   buildBoard(state.board);
+  if (state.status !== 'active') {
+    pendingMove = null;
+  }
   if (state.status === 'active') {
     rematchPrompt.style.display = 'none';
+    if (state.turn === username && pendingMove !== null) {
+      const queuedMove = pendingMove;
+      pendingMove = null;
+      socket.send(JSON.stringify({ type: 'move', column: queuedMove }));
+    }
   }
   if (state.status === 'finished') {
     if (state.winner) {
@@ -77,7 +86,12 @@ function updateTimer() {
 
 function sendMove(col) {
   if (!socket || socket.readyState !== WebSocket.OPEN) return;
-  socket.send(JSON.stringify({ type: 'move', column: col }));
+  if (currentState && currentState.status === 'active' && currentState.turn === username) {
+    socket.send(JSON.stringify({ type: 'move', column: col }));
+    return;
+  }
+  pendingMove = col;
+  statusEl.textContent = 'Move queued until your turn...';
 }
 
 function sendReset() {
