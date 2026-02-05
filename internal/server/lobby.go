@@ -56,6 +56,8 @@ func (s *Server) handleNewGame(player *game.Player) {
 	var notifyOpponent string
 	var oldGame *game.Game
 	var shouldFinalize bool
+	var concludedGame *game.Game
+	var concludedBotGame bool
 	s.mu.Lock()
 	s.removeFromQueueLocked(player.Username)
 	for _, g := range s.games {
@@ -88,6 +90,9 @@ func (s *Server) handleNewGame(player *game.Player) {
 				oldGame.WinnerID = opponent.ID
 			}
 			shouldFinalize = true
+			concludedGame = oldGame
+			concludedBotGame = (oldGame.Players[0] != nil && oldGame.Players[0].IsBot) ||
+				(oldGame.Players[1] != nil && oldGame.Players[1].IsBot)
 		}
 		delete(s.games, oldGame.ID)
 	}
@@ -105,11 +110,14 @@ func (s *Server) handleNewGame(player *game.Player) {
 	}
 	s.mu.Unlock()
 
-	if notifyOpponent != "" {
-		s.sendMessage(notifyOpponent, "status", "Opponent left. Start a new game to keep playing.")
-	}
 	if shouldFinalize {
 		s.finalizeGame(oldGame)
+	}
+	if concludedGame != nil {
+		s.sendState(concludedGame, "", concludedBotGame)
+	}
+	if notifyOpponent != "" {
+		s.sendMessage(notifyOpponent, "status", "Opponent left. You win by forfeit. Start a new game to keep playing.")
 	}
 	if gameInstance == nil {
 		return

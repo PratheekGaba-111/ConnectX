@@ -17,7 +17,7 @@ A real-time Connect Four style game with Go backend, WebSocket gameplay, a simpl
 
 ## Run the server
 ```bash
-go run ./cmd/server
+KAFKA_BROKERS=localhost:9092 go run ./cmd/server
 ```
 Then open http://localhost:8080
 

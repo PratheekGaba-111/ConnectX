@@ -4,37 +4,47 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>ConnectX - 4 in a Row</title>
-  <link rel="stylesheet" href="/styles.css" />
+  <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
-  <h1>ConnectX - 4 in a Row</h1>
-  <div id="login">
-    <label>
+  <h1 class="title" >ConnectX - 4 in a Row</h1>
+
+  <div id="user-display" class="user-display hidden"></div>
+
+  <!-- Login Screen -->
+  <div id="login" class="card">
+    <label class="label">
       Username:
-      <input id="username" type="text" placeholder="Enter username" />
+      <input id="username" class="input" type="text" placeholder="Enter username" />
     </label>
-    <button id="join">Login</button>
+    <button id="join" class="btn primary" >Login</button>
   </div>
 
-  <div id="game" style="display:none;">
-    <div id="turn"></div>
-    <div id="timer"></div>
-    <div id="board"></div>
-    <div id="controls">
-      <button id="new-game">New Game</button>
-      <button id="reset">Play Again</button>
-      <button id="logout">Logout</button>
+  <!-- Game Screen -->  
+  <div id="game" class="hidden">
+    <div id="turn" class="info-text"></div>
+    <div id="timer" class="info-text"></div>
+
+    <div id="board" class="board"></div>
+
+    <div id="controls" class="controls">
+      <button id="new-game" class="btn success">New Game</button>
+      <button id="reset" class="btn warning">Play Again</button>
+      <button id="logout" class="btn danger">Logout</button>
     </div>
-    <div id="rematch-prompt" style="display:none;">
+
+    <div id="rematch-prompt" class="rematch hidden">
       <span id="rematch-text">Opponent wants a rematch.</span>
-      <button id="rematch-accept">Accept</button>
-      <button id="rematch-reject">Reject</button>
+      <button id="rematch-accept" class="btn success">Accept</button>
+      <button id="rematch-reject" class="btn danger">Reject</button>
     </div>
-    <div id="status"></div>
-    <h3>Leaderboard</h3>
-    <ul id="leaderboard"></ul>
+
+    <div id="status" class="status"></div>
+
+    <h3 class="leaderboard-title">Leaderboard</h3>
+    <ul id="leaderboard" class="leaderboard"></ul>
   </div>
 
-  <script src="/app.js"></script>
+  <script src="app.js"></script>
 </body>
 </html>
