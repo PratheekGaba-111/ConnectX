@@ -216,7 +216,7 @@ func (s *Server) requestRematch(g *game.Game, player *game.Player) {
 	s.mu.Unlock()
 
 	if !ready {
-		s.sendMessage(player.Username, "status", "Waiting for opponent to accept rematch...")
+		s.sendMessage(player.Username, "status", "Rematch request sent. Waiting for opponent...")
 		return
 	}
 	s.clearRematchTimer(g.ID)
