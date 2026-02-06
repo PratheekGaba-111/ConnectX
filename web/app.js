@@ -111,7 +111,8 @@ function connect() {
   if (socket?.readyState === WebSocket.OPEN) socket.close();
 
   shouldReconnect = true;
-  socket = new WebSocket(`ws://${window.location.host}/ws`);
+  const wsProtocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
+  socket = new WebSocket(`${wsProtocol}://${window.location.host}/ws`);
 
   socket.addEventListener('open', () => {
     socket.send(JSON.stringify({ type: 'join', username }));
