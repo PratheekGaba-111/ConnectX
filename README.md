@@ -36,6 +36,6 @@ to the `connectx-events` topic. Use the analytics consumer to store or process t
 ## Project structure
 - `cmd/server` - app entry point
 - `cmd/analytics` - Kafka consumer for analytics
-- `internal/server` - server, lobby, WS, state, and game flow modules
+- `internal/server` - server, lobby, WS, state, and game flow modules   
 - `internal/game` - game rules, board logic, player/status types
 - `web` - static frontend (HTML, JS, CSS)

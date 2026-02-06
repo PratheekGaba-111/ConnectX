@@ -54,6 +54,7 @@ func (s *Server) handleNewGame(player *game.Player) {
 		return
 	}
 	var notifyOpponent string
+	var notifyMessage string
 	var oldGame *game.Game
 	var shouldFinalize bool
 	var concludedGame *game.Game
@@ -82,6 +83,11 @@ func (s *Server) handleNewGame(player *game.Player) {
 		opponent := oldGame.Players[(player.ID)%2]
 		if opponent != nil && !opponent.IsBot {
 			notifyOpponent = opponent.Username
+			if oldGame.Status == game.StatusActive {
+				notifyMessage = "Opponent forfeited the match, you won."
+			} else if oldGame.Status == game.StatusFinished {
+				notifyMessage = "Opponent Left"
+			}
 		}
 		if oldGame.Status == game.StatusActive {
 			oldGame.Status = game.StatusFinished
@@ -116,8 +122,8 @@ func (s *Server) handleNewGame(player *game.Player) {
 	if concludedGame != nil {
 		s.sendState(concludedGame, "", concludedBotGame)
 	}
-	if notifyOpponent != "" {
-		s.sendMessage(notifyOpponent, "status", "Opponent left. You win by forfeit. Start a new game to keep playing.")
+	if notifyOpponent != "" && notifyMessage != "" {
+		s.sendMessage(notifyOpponent, "status", notifyMessage)
 	}
 	if gameInstance == nil {
 		return
