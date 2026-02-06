@@ -18,8 +18,12 @@ func main() {
 	}
 	defer cleanup()
 
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8080"
+	}
 	httpServer := &http.Server{
-		Addr:    ":8080",
+		Addr:    ":" + port,
 		Handler: srv.Routes(),
 	}
 
