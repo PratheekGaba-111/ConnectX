@@ -1,6 +1,7 @@
 # ConnectX - 4 in a Row
 
 A real-time Connect Four style game with Go backend, WebSocket gameplay, a simple frontend, a fallback competitive bot, and optional Kafka analytics.
+Deployed on https://connectx-iw0u.onrender.com/
 
 ## Features
 - Real-time matchmaking with 10s bot fallback
