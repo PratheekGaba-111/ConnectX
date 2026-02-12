@@ -40,3 +40,8 @@ to the `connectx-events` topic. Use the analytics consumer to store or process t
 - `internal/server` - server, lobby, WS, state, and game flow modules   
 - `internal/game` - game rules, board logic, player/status types
 - `web` - static frontend (HTML, JS, CSS)
+
+## routes
+- / -> for login page
+- /api/analytics -> to access KAFKA analytics
+- /api/leaderboard -> to access global leaderboard
